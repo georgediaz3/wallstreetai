@@ -13,8 +13,12 @@ import plotly.express as px  # for advanced charts
 
 from fetch_data import (
     get_all_symbols,
+    fetch_multiple_ohlcv,
     filter_crypto_pairs,
-    fetch_multiple_ohlcv
+    fetch_realtime_quotes,
+    fetch_ohlcv,
+
+)
 )
 from preprocess import add_indicators_and_sentiment
 
