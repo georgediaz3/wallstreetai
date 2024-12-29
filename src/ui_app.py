@@ -102,6 +102,9 @@ def compute_technical_indicators(df):
         return pd.DataFrame()
 
     # Debugging: Validate input DataFrame
+    st.write("Input DataFrame for indicators:")
+    st.dataframe(df)
+
     if 'close' not in df.columns or df['close'].isnull().all():
         st.error("Missing or invalid 'close' data in the DataFrame.")
         return pd.DataFrame()
@@ -133,6 +136,11 @@ def compute_technical_indicators(df):
 
     # Drop rows with any NaN values resulting from calculations
     df.dropna(inplace=True)
+
+    # Debugging: Show DataFrame after computing indicators
+    st.write("DataFrame after computing indicators:")
+    st.dataframe(df)
+
     return df
 
 
@@ -144,23 +152,18 @@ def analyze_and_trade(symbols, model):
             st.dataframe(ohlcv_df)
 
             if ohlcv_df.empty or 'close' not in ohlcv_df.columns or ohlcv_df['close'].isnull().all():
-                st.warning(f"No valid 'close' data available for {symbol}, skipping.")
+                st.warning(f"No valid data available for {symbol}, skipping.")
                 continue
 
             # Compute indicators
             ohlcv_df = compute_technical_indicators(ohlcv_df)
 
-            if ohlcv_df.empty:
+            if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']):
                 st.warning(f"Insufficient data for {symbol} after computing indicators, skipping.")
                 continue
 
-            # Debugging: Show DataFrame after computing indicators
-            st.write(f"DataFrame after computing indicators for {symbol}:")
-            st.dataframe(ohlcv_df)
-
             # Extract features for AI model
-            required_columns = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
-            latest_features = ohlcv_df.iloc[-1][required_columns].values.reshape(1, -1)
+            latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
             prediction = model.predict(latest_features)[0]
             current_price = ohlcv_df.iloc[-1]['close']
 
@@ -256,6 +259,9 @@ def compute_technical_indicators(df):
         return pd.DataFrame()
 
     # Debugging: Validate input DataFrame
+    st.write("Input DataFrame for indicators:")
+    st.dataframe(df)
+
     if 'close' not in df.columns or df['close'].isnull().all():
         st.error("Missing or invalid 'close' data in the DataFrame.")
         return pd.DataFrame()
@@ -287,6 +293,11 @@ def compute_technical_indicators(df):
 
     # Drop rows with any NaN values resulting from calculations
     df.dropna(inplace=True)
+
+    # Debugging: Show DataFrame after computing indicators
+    st.write("DataFrame after computing indicators:")
+    st.dataframe(df)
+
     return df
 
 
