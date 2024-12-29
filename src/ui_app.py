@@ -120,7 +120,8 @@ def compute_technical_indicators(df):
 def analyze_and_trade(symbols, model):
     for symbol in symbols:
         try:
-            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
+            # Fetch OHLCV data
+            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)
             st.write(f"Fetched data for {symbol}:")
             st.dataframe(ohlcv_df)
 
@@ -128,18 +129,22 @@ def analyze_and_trade(symbols, model):
                 st.warning(f"No data available for {symbol}, skipping.")
                 continue
 
-            # Ensure required columns exist
-            required_columns = ['timestamp', 'close', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+            # Compute missing indicators
+            required_columns = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
             if not all(col in ohlcv_df.columns for col in required_columns):
                 ohlcv_df = compute_technical_indicators(ohlcv_df)
-                ohlcv_df.dropna(inplace=True)
+                ohlcv_df.dropna(inplace=True)  # Drop rows with NaN values after computation
+
+            # Debugging: Ensure all required columns are present
+            st.write(f"Data after computing indicators for {symbol}:")
+            st.dataframe(ohlcv_df)
 
             if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in required_columns):
                 st.warning(f"Missing or insufficient data for {symbol}, skipping.")
                 continue
 
             # Extract features for AI model
-            latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
+            latest_features = ohlcv_df.iloc[-1][required_columns].values.reshape(1, -1)
             prediction = model.predict(latest_features)[0]
             current_price = ohlcv_df.iloc[-1]['close']
 
@@ -152,9 +157,6 @@ def analyze_and_trade(symbols, model):
                 place_paper_sell(symbol, sell_quantity, current_price)
         except Exception as e:
             st.error(f"Error processing {symbol}: {e}")
-
-
-
 
 # ---------------------------------------
 # 5. Main Function
