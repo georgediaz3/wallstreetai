@@ -90,6 +90,33 @@ def place_paper_sell(symbol, sell_quantity, current_price):
 # ---------------------------------------
 # 4. Automated Paper Trading
 # ---------------------------------------
+# 4. Automated Paper Trading
+def compute_technical_indicators(df):
+    """
+    Compute technical indicators using the 'ta' library.
+    """
+    try:
+        import ta  # Ensure 'ta' is installed: pip install ta
+    except ImportError:
+        st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
+        return df
+
+    # Add RSI
+    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+
+    # Add MACD
+    macd = ta.trend.MACD(close=df['close'])
+    df['macd'] = macd.macd()
+    df['macd_signal'] = macd.macd_signal()
+    df['macd_diff'] = macd.macd_diff()
+
+    # Add Bollinger Bands
+    bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+    df['bb_high'] = bollinger.bollinger_hband()
+    df['bb_low'] = bollinger.bollinger_lband()
+
+    return df
+
 def analyze_and_trade(symbols, model):
     for symbol in symbols:
         try:
@@ -123,6 +150,7 @@ def analyze_and_trade(symbols, model):
                 place_paper_sell(symbol, sell_quantity, current_price)
         except Exception as e:
             st.error(f"Error processing {symbol}: {e}")
+
 
 
 # ---------------------------------------
