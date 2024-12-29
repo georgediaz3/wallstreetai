@@ -90,7 +90,6 @@ def place_paper_sell(symbol, sell_quantity, current_price):
 # ---------------------------------------
 # 4. Automated Paper Trading
 # ---------------------------------------
-# 4. Automated Paper Trading
 def compute_technical_indicators(df):
     """
     Compute technical indicators using the 'ta' library.
@@ -99,68 +98,44 @@ def compute_technical_indicators(df):
         import ta  # Ensure 'ta' is installed: pip install ta
     except ImportError:
         st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
-        return pd.DataFrame()
+        return df
 
-    # Validate that 'close' column exists and contains data
-    if 'close' not in df.columns or df['close'].isnull().all():
-        st.error("Missing or invalid 'close' data in the DataFrame.")
-        return pd.DataFrame()
+    # Add RSI
+    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
 
-    # Clean data by removing rows with NaN or infinite 'close' values
-    df = df[df['close'].notnull() & ~df['close'].isin([float('inf'), float('-inf')])]
-    if df.empty:
-        st.error("DataFrame is empty after cleaning 'close' values.")
-        return pd.DataFrame()
+    # Add MACD
+    macd = ta.trend.MACD(close=df['close'])
+    df['macd'] = macd.macd()
+    df['macd_signal'] = macd.macd_signal()
+    df['macd_diff'] = macd.macd_diff()
 
-    try:
-        # Compute RSI
-        df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
-
-        # Compute MACD
-        macd = ta.trend.MACD(close=df['close'])
-        df['macd'] = macd.macd()
-        df['macd_signal'] = macd.macd_signal()
-        df['macd_diff'] = macd.macd_diff()
-
-        # Compute Bollinger Bands
-        bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-        df['bb_high'] = bollinger.bollinger_hband()
-        df['bb_low'] = bollinger.bollinger_lband()
-    except Exception as e:
-        st.error(f"Error computing technical indicators: {e}")
-        return pd.DataFrame()
-
-    # Drop rows with NaN values after indicator computation
-    df.dropna(inplace=True)
-    if df.empty:
-        st.error("DataFrame is empty after dropping NaN values from indicators.")
-        return pd.DataFrame()
+    # Add Bollinger Bands
+    bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+    df['bb_high'] = bollinger.bollinger_hband()
+    df['bb_low'] = bollinger.bollinger_lband()
 
     return df
-
-
 
 def analyze_and_trade(symbols, model):
     for symbol in symbols:
         try:
-            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=50)  # Fetch last 50 minutes of data
+            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
             st.write(f"Fetched data for {symbol}:")
             st.dataframe(ohlcv_df)
 
-            if ohlcv_df.empty or 'close' not in ohlcv_df.columns or ohlcv_df['close'].isnull().all():
-                st.warning(f"No valid data available for {symbol}, skipping.")
+            if ohlcv_df.empty or len(ohlcv_df) < 1:
+                st.warning(f"No data available for {symbol}, skipping.")
                 continue
 
-            # Compute indicators
-            ohlcv_df = compute_technical_indicators(ohlcv_df)
+            # Ensure required columns exist
+            required_columns = ['timestamp', 'close', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+            if not all(col in ohlcv_df.columns for col in required_columns):
+                ohlcv_df = compute_technical_indicators(ohlcv_df)
+                ohlcv_df.dropna(inplace=True)
 
-            if ohlcv_df.empty:
-                st.warning(f"Insufficient data for {symbol} after computing indicators, skipping.")
+            if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in required_columns):
+                st.warning(f"Missing or insufficient data for {symbol}, skipping.")
                 continue
-
-            # Debugging: Show DataFrame after computing indicators
-            st.write(f"DataFrame after computing indicators for {symbol}:")
-            st.dataframe(ohlcv_df)
 
             # Extract features for AI model
             latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
@@ -177,124 +152,83 @@ def analyze_and_trade(symbols, model):
         except Exception as e:
             st.error(f"Error processing {symbol}: {e}")
 
-
-
-
 # ---------------------------------------
 # 5. Main Function
 # ---------------------------------------
+def show_portfolio_and_history():
+    """Displays the portfolio and trade history in a separate menu."""
+    st.title("Portfolio and Trade History")
+
+    # Display portfolio
+    st.subheader("Paper Trading Portfolio")
+    st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
+
+    holdings = st.session_state['holdings']
+    if holdings:
+        holdings_df = pd.DataFrame([
+            {
+                'Symbol': sym,
+                'Quantity': qty,
+                'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
+            } for sym, qty in holdings.items() if qty > 0
+        ])
+        st.dataframe(holdings_df)
+    else:
+        st.write("No holdings.")
+
+    # Display trade history
+    st.subheader("Trade History")
+    if st.session_state['trade_history']:
+        trades_df = pd.DataFrame(st.session_state['trade_history'])
+        st.dataframe(trades_df)
+    else:
+        st.write("No trades executed yet.")
+
 def main():
     st.set_page_config(page_title="AI-Driven Paper Trading Dashboard", layout="wide")
-    st.title("AI-Driven Paper Trading Dashboard")
+    st.sidebar.title("Menu")
+    menu_choice = st.sidebar.radio("Select a view:", ("Trading Dashboard", "Portfolio & History"))
 
-    # Initialize session state
-    initialize_session_state()
+    if menu_choice == "Trading Dashboard":
+        st.title("AI-Driven Paper Trading Dashboard")
 
-    # Sidebar configuration
-    st.sidebar.title("Settings")
-    trade_amount = st.sidebar.number_input("Trade Amount (USD, % of Balance)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
-    st.sidebar.write(f"Available Balance: ${st.session_state['paper_balance']:.2f}")
-    start_trading = st.sidebar.button("Start Automated Trading")
+        # Initialize session state
+        initialize_session_state()
 
-    # Load the AI model
-    model = load_model()
+        # Sidebar configuration
+        trade_amount = st.sidebar.number_input("Trade Amount (USD, % of Balance)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+        st.sidebar.write(f"Available Balance: ${st.session_state['paper_balance']:.2f}")
+        start_trading = st.sidebar.button("Start Automated Trading")
 
-    if model and start_trading:
-        st.write("Starting automated trading...")
-        try:
-            symbols = get_all_symbols()
-            if not symbols:
-                st.error("No symbols returned. Please check the data source.")
+        # Load the AI model
+        model = load_model()
+
+        if model and start_trading:
+            st.write("Starting automated trading...")
+            try:
+                symbols = get_all_symbols()
+                if not symbols:
+                    st.error("No symbols returned. Please check the data source.")
+                    return
+            except Exception as e:
+                st.error(f"Error fetching symbols: {e}")
                 return
-        except Exception as e:
-            st.error(f"Error fetching symbols: {e}")
-            return
 
-        try:
-            while True:
-                analyze_and_trade(symbols, model)
+            try:
+                while True:
+                    analyze_and_trade(symbols, model)
+                    if st.sidebar.button("Stop Trading"):
+                        st.write("Trading stopped.")
+                        break
+                    time.sleep(60)  # Wait 1 minute between trades
+            except KeyboardInterrupt:
+                st.write("Trading interrupted by user.")
 
-                # Display portfolio
-                st.subheader("Paper Trading Portfolio")
-                st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
-
-                holdings = st.session_state['holdings']
-                if holdings:
-                    holdings_df = pd.DataFrame([
-                        {
-                            'Symbol': sym,
-                            'Quantity': qty,
-                            'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
-                        } for sym, qty in holdings.items() if qty > 0
-                    ])
-                    st.dataframe(holdings_df)
-                else:
-                    st.write("No holdings.")
-
-                # Display trade history
-                st.subheader("Trade History")
-                if st.session_state['trade_history']:
-                    trades_df = pd.DataFrame(st.session_state['trade_history'])
-                    st.dataframe(trades_df)
-                else:
-                    st.write("No trades executed yet.")
-
-                if st.sidebar.button("Stop Trading"):
-                    st.write("Trading stopped.")
-                    break
-                time.sleep(60)  # Wait 1 minute between trades
-        except KeyboardInterrupt:
-            st.write("Trading interrupted by user.")
+    elif menu_choice == "Portfolio & History":
+        show_portfolio_and_history()
 
 if __name__ == "__main__":
     main()
-
-def compute_technical_indicators(df):
-    """
-    Compute technical indicators using the 'ta' library.
-    """
-    try:
-        import ta  # Ensure 'ta' is installed: pip install ta
-    except ImportError:
-        st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
-        return pd.DataFrame()
-
-    # Validate that 'close' column exists and contains data
-    if 'close' not in df.columns or df['close'].isnull().all():
-        st.error("Missing or invalid 'close' data in the DataFrame.")
-        return pd.DataFrame()
-
-    # Clean data by removing rows with NaN or infinite 'close' values
-    df = df[df['close'].notnull() & ~df['close'].isin([float('inf'), float('-inf')])]
-    if df.empty:
-        st.error("DataFrame is empty after cleaning 'close' values.")
-        return pd.DataFrame()
-
-    try:
-        # Compute RSI
-        df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
-
-        # Compute MACD
-        macd = ta.trend.MACD(close=df['close'])
-        df['macd'] = macd.macd()
-        df['macd_signal'] = macd.macd_signal()
-        df['macd_diff'] = macd.macd_diff()
-
-        # Compute Bollinger Bands
-        bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-        df['bb_high'] = bollinger.bollinger_hband()
-        df['bb_low'] = bollinger.bollinger_lband()
-    except Exception as e:
-        st.error(f"Error computing technical indicators: {e}")
-        return pd.DataFrame()
-
-    # Drop rows with NaN values after indicator computation
-    df.dropna(inplace=True)
-    if df.empty:
-        st.error("DataFrame is empty after dropping NaN values from indicators.")
-        return pd.DataFrame()
-
-    return df
 
 
 
