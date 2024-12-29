@@ -143,7 +143,7 @@ def compute_technical_indicators(df):
 def analyze_and_trade(symbols, model):
     for symbol in symbols:
         try:
-            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
+            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=50)  # Fetch last 50 minutes of data
             st.write(f"Fetched data for {symbol}:")
             st.dataframe(ohlcv_df)
 
@@ -154,9 +154,13 @@ def analyze_and_trade(symbols, model):
             # Compute indicators
             ohlcv_df = compute_technical_indicators(ohlcv_df)
 
-            if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']):
+            if ohlcv_df.empty:
                 st.warning(f"Insufficient data for {symbol} after computing indicators, skipping.")
                 continue
+
+            # Debugging: Show DataFrame after computing indicators
+            st.write(f"DataFrame after computing indicators for {symbol}:")
+            st.dataframe(ohlcv_df)
 
             # Extract features for AI model
             latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
@@ -172,6 +176,7 @@ def analyze_and_trade(symbols, model):
                 place_paper_sell(symbol, sell_quantity, current_price)
         except Exception as e:
             st.error(f"Error processing {symbol}: {e}")
+
 
 
 
