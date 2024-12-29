@@ -120,31 +120,28 @@ def compute_technical_indicators(df):
 def analyze_and_trade(symbols, model):
     for symbol in symbols:
         try:
-            # Fetch OHLCV data
-            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)
+            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
             st.write(f"Fetched data for {symbol}:")
             st.dataframe(ohlcv_df)
 
-            if ohlcv_df.empty or len(ohlcv_df) < 1:
-                st.warning(f"No data available for {symbol}, skipping.")
+            if ohlcv_df.empty or 'close' not in ohlcv_df.columns or ohlcv_df['close'].isnull().all():
+                st.warning(f"No valid data available for {symbol}, skipping.")
                 continue
 
-            # Compute missing indicators
-            required_columns = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
-            if not all(col in ohlcv_df.columns for col in required_columns):
-                ohlcv_df = compute_technical_indicators(ohlcv_df)
-                ohlcv_df.dropna(inplace=True)  # Drop rows with NaN values after computation
+            # Compute indicators
+            ohlcv_df = compute_technical_indicators(ohlcv_df)
+            ohlcv_df.dropna(inplace=True)
 
-            # Debugging: Ensure all required columns are present
-            st.write(f"Data after computing indicators for {symbol}:")
+            # Debugging: Show DataFrame after computing indicators
+            st.write(f"DataFrame after computing indicators for {symbol}:")
             st.dataframe(ohlcv_df)
 
-            if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in required_columns):
+            if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']):
                 st.warning(f"Missing or insufficient data for {symbol}, skipping.")
                 continue
 
             # Extract features for AI model
-            latest_features = ohlcv_df.iloc[-1][required_columns].values.reshape(1, -1)
+            latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
             prediction = model.predict(latest_features)[0]
             current_price = ohlcv_df.iloc[-1]['close']
 
