@@ -1,36 +1,49 @@
 # src/train_model.py
+
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+import os
 import pickle
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
 
-def train_random_forest(data_path='data/historical_data_with_indicators.csv'):
+def train_model(data_path, model_path):
+    if not os.path.exists(data_path):
+        print(f"Data file {data_path} not found. Please run preprocess.py first.")
+        return
+
+    # Load data
     df = pd.read_csv(data_path)
-    
-    # Create a label: 1 if next close is higher, else 0
-    df['future_close'] = df['close'].shift(-1)
-    df.dropna(inplace=True)
-    df['target'] = (df['future_close'] > df['close']).astype(int)
+    print(f"Loaded data with {len(df)} records.")
 
-    # Feature columns
-    features = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+    # Feature Selection
+    features = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low', 'sentiment']  # 7 features
     X = df[features]
-    y = df['target']
 
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+    # Target Variable
+    df['buy_signal'] = (df['rsi'] < 30).astype(int)
+    y = df['buy_signal']
 
-    # Train a Random Forest
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Evaluate
-    score = model.score(X_test, y_test)
-    print(f"Test Accuracy: {score:.2f}")
+    # Initialize and train the model
+    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+    clf.fit(X_train, y_train)
+    print("Model training completed.")
 
-    # Save model
-    with open('models/random_forest.pkl', 'wb') as f:
-        pickle.dump(model, f)
+    # Evaluate the model
+    y_pred = clf.predict(X_test)
+    print("Classification Report:")
+    print(classification_report(y_test, y_pred))
+
+    # Save the trained model
+    with open(model_path, 'wb') as f:
+        pickle.dump(clf, f)
+    print(f"Trained model saved to {model_path}")
 
 if __name__ == "__main__":
-    train_random_forest()
+    data_path = os.path.join("data", "multi_data_with_indicators_sentiment.csv")
+    model_path = os.path.join("models", "random_forest.pkl")
+    train_model(data_path, model_path)
+
