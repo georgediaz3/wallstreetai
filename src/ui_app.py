@@ -98,18 +98,19 @@ def analyze_and_trade(symbols, model):
                 st.warning(f"No data available for {symbol}, skipping.")
                 continue
 
-            # Verify columns
+            # Compute indicators if missing
             required_columns = ['close', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+            if not all(col in ohlcv_df.columns for col in required_columns):
+                ohlcv_df = compute_technical_indicators(ohlcv_df)
+                ohlcv_df.dropna(inplace=True)  # Drop rows with NaN values after computation
+
+            # Recheck columns after computation
             if not all(col in ohlcv_df.columns for col in required_columns):
                 st.warning(f"Missing required columns for {symbol}, skipping.")
                 continue
 
-            # Compute indicators
-            ohlcv_df = compute_technical_indicators(ohlcv_df)
-            ohlcv_df.dropna(inplace=True)  # Drop rows with NaN values due to indicator calculation
-
             # Extract features for AI model
-            latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
+            latest_features = ohlcv_df.iloc[-1][required_columns[1:]].values.reshape(1, -1)
             prediction = model.predict(latest_features)[0]
             current_price = ohlcv_df.iloc[-1]['close']
 
@@ -157,37 +158,38 @@ def main():
         try:
             while True:
                 analyze_and_trade(symbols, model)
+
+                # Display portfolio
+                st.subheader("Paper Trading Portfolio")
+                st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
+
+                holdings = st.session_state['holdings']
+                if holdings:
+                    holdings_df = pd.DataFrame([
+                        {
+                            'Symbol': sym,
+                            'Quantity': qty,
+                            'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
+                        } for sym, qty in holdings.items() if qty > 0
+                    ])
+                    st.dataframe(holdings_df)
+                else:
+                    st.write("No holdings.")
+
+                # Display trade history
+                st.subheader("Trade History")
+                if st.session_state['trade_history']:
+                    trades_df = pd.DataFrame(st.session_state['trade_history'])
+                    st.dataframe(trades_df)
+                else:
+                    st.write("No trades executed yet.")
+
                 if st.sidebar.button("Stop Trading"):
                     st.write("Trading stopped.")
                     break
                 time.sleep(60)  # Wait 1 minute between trades
         except KeyboardInterrupt:
             st.write("Trading interrupted by user.")
-
-    # Display portfolio summary
-    st.subheader("Paper Trading Portfolio")
-    st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
-
-    holdings = st.session_state['holdings']
-    if holdings:
-        holdings_df = pd.DataFrame([
-            {
-                'Symbol': sym,
-                'Quantity': qty,
-                'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
-            } for sym, qty in holdings.items() if qty > 0
-        ])
-        st.dataframe(holdings_df)
-    else:
-        st.write("No holdings.")
-
-    # Display trade history
-    st.subheader("Trade History")
-    if st.session_state['trade_history']:
-        trades_df = pd.DataFrame(st.session_state['trade_history'])
-        st.dataframe(trades_df)
-    else:
-        st.write("No trades executed yet.")
 
 if __name__ == "__main__":
     main()
@@ -217,4 +219,5 @@ def compute_technical_indicators(df):
     df['bb_low'] = bollinger.bollinger_lband()
 
     return df
+
 
