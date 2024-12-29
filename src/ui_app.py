@@ -189,11 +189,11 @@ def main():
     st.sidebar.title("Menu")
     menu_choice = st.sidebar.radio("Select a view:", ("Trading Dashboard", "Portfolio & History"))
 
-    # Initialize session state
-    initialize_session_state()
-
     if menu_choice == "Trading Dashboard":
         st.title("AI-Driven Paper Trading Dashboard")
+
+        # Initialize session state
+        initialize_session_state()
 
         # Sidebar configuration
         trade_amount = st.sidebar.number_input("Trade Amount (USD, % of Balance)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
@@ -214,46 +214,21 @@ def main():
                 st.error(f"Error fetching symbols: {e}")
                 return
 
-            # Start trading and real-time updates
-            stop_trading = False
-            while not stop_trading:
-                # Trading loop
-                try:
+            try:
+                while True:
                     analyze_and_trade(symbols, model)
-
-                    # Real-time portfolio update
-                    st.subheader("Live Portfolio")
-                    st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
-                    holdings = st.session_state['holdings']
-                    if holdings:
-                        holdings_df = pd.DataFrame([
-                            {
-                                'Symbol': sym,
-                                'Quantity': qty,
-                                'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
-                            } for sym, qty in holdings.items() if qty > 0
-                        ])
-                        st.dataframe(holdings_df)
-                    else:
-                        st.write("No holdings.")
-
-                    # Real-time trade history update
-                    st.subheader("Live Trade History")
-                    if st.session_state['trade_history']:
-                        trades_df = pd.DataFrame(st.session_state['trade_history'])
-                        st.dataframe(trades_df)
-                    else:
-                        st.write("No trades executed yet.")
-
-                    # Check for stop condition
-                    stop_trading = st.sidebar.button("Stop Trading")
+                    if st.sidebar.button("Stop Trading"):
+                        st.write("Trading stopped.")
+                        break
                     time.sleep(60)  # Wait 1 minute between trades
-                except Exception as e:
-                    st.error(f"Trading error: {e}")
-                    break
+            except KeyboardInterrupt:
+                st.write("Trading interrupted by user.")
 
     elif menu_choice == "Portfolio & History":
         show_portfolio_and_history()
+
+if __name__ == "__main__":
+    main()
 
 
 
