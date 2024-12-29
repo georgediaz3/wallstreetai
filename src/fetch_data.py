@@ -194,6 +194,19 @@ def get_all_symbols(quote_currencies=["USD", "USDT"]):
     except Exception as e:
         st.error(f"Error retrieving symbols: {e}")
         return []
+def filter_crypto_pairs(all_symbols, base_currencies=["BTC", "ETH"]):
+    """
+    Filters symbols to include only those with specified base currencies.
+
+    Parameters:
+    - all_symbols (list): List of trading pairs (e.g., ['BTC/USD', 'ETH/USD']).
+    - base_currencies (list): List of base currencies to filter (e.g., ['BTC', 'ETH']).
+
+    Returns:
+    - list: Filtered list of symbols.
+    """
+    return [symbol for symbol in all_symbols if symbol.split('/')[0] in base_currencies]
+
 
 
 
