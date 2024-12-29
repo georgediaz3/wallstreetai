@@ -95,6 +95,13 @@ def analyze_and_trade(symbols, model):
         try:
             ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
             if ohlcv_df.empty:
+                st.warning(f"No data available for {symbol}, skipping.")
+                continue
+
+            # Verify columns
+            required_columns = ['close', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+            if not all(col in ohlcv_df.columns for col in required_columns):
+                st.warning(f"Missing required columns for {symbol}, skipping.")
                 continue
 
             # Compute indicators
@@ -114,7 +121,7 @@ def analyze_and_trade(symbols, model):
                 sell_quantity = st.session_state['holdings'][symbol]
                 place_paper_sell(symbol, sell_quantity, current_price)
         except Exception as e:
-            st.error(f\"Error processing {symbol}: {e}\")
+            st.error(f"Error processing {symbol}: {e}")
 
 
 # ---------------------------------------
@@ -138,10 +145,24 @@ def main():
 
     if model and start_trading:
         st.write("Starting automated trading...")
-        symbols = get_all_symbols()
-        while True:
-            analyze_and_trade(symbols, model)
-            time.sleep(60)  # Wait 1 minute between trades
+        try:
+            symbols = get_all_symbols()
+            if not symbols:
+                st.error("No symbols returned. Please check the data source.")
+                return
+        except Exception as e:
+            st.error(f"Error fetching symbols: {e}")
+            return
+
+        try:
+            while True:
+                analyze_and_trade(symbols, model)
+                if st.sidebar.button("Stop Trading"):
+                    st.write("Trading stopped.")
+                    break
+                time.sleep(60)  # Wait 1 minute between trades
+        except KeyboardInterrupt:
+            st.write("Trading interrupted by user.")
 
     # Display portfolio summary
     st.subheader("Paper Trading Portfolio")
@@ -170,6 +191,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 def compute_technical_indicators(df):
     """
     Compute technical indicators using the 'ta' library.
