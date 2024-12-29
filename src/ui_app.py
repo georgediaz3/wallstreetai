@@ -288,7 +288,7 @@ def compute_technical_indicators(df):
     # Drop rows with any NaN values resulting from calculations
     df.dropna(inplace=True)
     return df
-a
+
 
 
 
