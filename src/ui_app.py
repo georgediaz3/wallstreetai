@@ -121,7 +121,7 @@ def analyze_and_trade(symbols, model):
     for symbol in symbols:
         try:
             ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
-            if ohlcv_df.empty:
+            if ohlcv_df.empty or len(ohlcv_df) < 1:
                 st.warning(f"No data available for {symbol}, skipping.")
                 continue
 
@@ -132,8 +132,8 @@ def analyze_and_trade(symbols, model):
                 ohlcv_df.dropna(inplace=True)  # Drop rows with NaN values after computation
 
             # Recheck columns after computation
-            if not all(col in ohlcv_df.columns for col in required_columns):
-                st.warning(f"Missing required columns for {symbol}, skipping.")
+            if not all(col in ohlcv_df.columns for col in required_columns) or len(ohlcv_df) < 1:
+                st.warning(f"Missing or insufficient data for {symbol}, skipping.")
                 continue
 
             # Extract features for AI model
