@@ -101,32 +101,28 @@ def compute_technical_indicators(df):
         st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
         return pd.DataFrame()
 
-    # Debugging: Validate input DataFrame
-    st.write("Input DataFrame for indicators:")
-    st.dataframe(df)
-
+    # Validate that 'close' column exists and contains data
     if 'close' not in df.columns or df['close'].isnull().all():
         st.error("Missing or invalid 'close' data in the DataFrame.")
         return pd.DataFrame()
 
-    # Remove any rows with NaN or infinite values in 'close'
+    # Clean data by removing rows with NaN or infinite 'close' values
     df = df[df['close'].notnull() & ~df['close'].isin([float('inf'), float('-inf')])]
-
     if df.empty:
         st.error("DataFrame is empty after cleaning 'close' values.")
         return pd.DataFrame()
 
     try:
-        # Add RSI
+        # Compute RSI
         df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
 
-        # Add MACD
+        # Compute MACD
         macd = ta.trend.MACD(close=df['close'])
         df['macd'] = macd.macd()
         df['macd_signal'] = macd.macd_signal()
         df['macd_diff'] = macd.macd_diff()
 
-        # Add Bollinger Bands
+        # Compute Bollinger Bands
         bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
         df['bb_high'] = bollinger.bollinger_hband()
         df['bb_low'] = bollinger.bollinger_lband()
@@ -134,14 +130,14 @@ def compute_technical_indicators(df):
         st.error(f"Error computing technical indicators: {e}")
         return pd.DataFrame()
 
-    # Drop rows with any NaN values resulting from calculations
+    # Drop rows with NaN values after indicator computation
     df.dropna(inplace=True)
-
-    # Debugging: Show DataFrame after computing indicators
-    st.write("DataFrame after computing indicators:")
-    st.dataframe(df)
+    if df.empty:
+        st.error("DataFrame is empty after dropping NaN values from indicators.")
+        return pd.DataFrame()
 
     return df
+
 
 
 def analyze_and_trade(symbols, model):
@@ -258,32 +254,28 @@ def compute_technical_indicators(df):
         st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
         return pd.DataFrame()
 
-    # Debugging: Validate input DataFrame
-    st.write("Input DataFrame for indicators:")
-    st.dataframe(df)
-
+    # Validate that 'close' column exists and contains data
     if 'close' not in df.columns or df['close'].isnull().all():
         st.error("Missing or invalid 'close' data in the DataFrame.")
         return pd.DataFrame()
 
-    # Remove any rows with NaN or infinite values in 'close'
+    # Clean data by removing rows with NaN or infinite 'close' values
     df = df[df['close'].notnull() & ~df['close'].isin([float('inf'), float('-inf')])]
-
     if df.empty:
         st.error("DataFrame is empty after cleaning 'close' values.")
         return pd.DataFrame()
 
     try:
-        # Add RSI
+        # Compute RSI
         df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
 
-        # Add MACD
+        # Compute MACD
         macd = ta.trend.MACD(close=df['close'])
         df['macd'] = macd.macd()
         df['macd_signal'] = macd.macd_signal()
         df['macd_diff'] = macd.macd_diff()
 
-        # Add Bollinger Bands
+        # Compute Bollinger Bands
         bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
         df['bb_high'] = bollinger.bollinger_hband()
         df['bb_low'] = bollinger.bollinger_lband()
@@ -291,14 +283,14 @@ def compute_technical_indicators(df):
         st.error(f"Error computing technical indicators: {e}")
         return pd.DataFrame()
 
-    # Drop rows with any NaN values resulting from calculations
+    # Drop rows with NaN values after indicator computation
     df.dropna(inplace=True)
-
-    # Debugging: Show DataFrame after computing indicators
-    st.write("DataFrame after computing indicators:")
-    st.dataframe(df)
+    if df.empty:
+        st.error("DataFrame is empty after dropping NaN values from indicators.")
+        return pd.DataFrame()
 
     return df
+
 
 
 
