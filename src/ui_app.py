@@ -154,13 +154,16 @@ def analyze_and_trade(symbols, model):
 def main():
     st.set_page_config(page_title="AI-Driven Paper Trading Dashboard", layout="wide")
 
+    # Initialize session state
+    initialize_session_state()
+
     # Portfolio display at the top of the page
     st.title("Portfolio Overview")
 
     st.subheader("Paper Trading Portfolio")
-    st.write(f"**Paper USD Balance:** ${st.session_state.get('paper_balance', 10000.0):.2f}")
+    st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
 
-    holdings = st.session_state.get('holdings', {})
+    holdings = st.session_state['holdings']
     if holdings:
         holdings_df = pd.DataFrame([
             {
@@ -174,7 +177,7 @@ def main():
         st.write("No holdings.")
 
     st.subheader("Trade History")
-    if st.session_state.get('trade_history'):
+    if st.session_state['trade_history']:
         trades_df = pd.DataFrame(st.session_state['trade_history'])
         st.dataframe(trades_df)
     else:
@@ -215,8 +218,6 @@ def main():
             except KeyboardInterrupt:
                 st.write("Trading interrupted by user.")
 
-if __name__ == "__main__":
-    main()
 
 
 
