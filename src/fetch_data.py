@@ -140,34 +140,14 @@ def fetch_realtime_quotes(symbols=None):
     return pd.DataFrame(results)
 
 def fetch_ohlcv(symbol='BTC/USD', timeframe='1m', limit=30):
-    """
-    Fetches short-term OHLCV data for a single symbol.
-    Useful for generating real-time charts in the Streamlit app.
-    
-    Parameters:
-    - symbol (str): Trading pair (e.g., 'BTC/USD').
-    - timeframe (str): Timeframe for OHLCV data (e.g., '1m').
-    - limit (int): Number of data points to fetch.
-    
-    Returns:
-    - pd.DataFrame: OHLCV data for the symbol.
-    """
     try:
         exchange = get_exchange()
-    except (ValueError, RuntimeError) as e:
-        st.error(e)
-        return pd.DataFrame()
-
-    try:
-        st.write(f"Fetching OHLCV data for {symbol} with timeframe {timeframe}...")
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        time.sleep(0.2)  # Sleep to respect rate limits
         df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        st.write(f"Fetched {len(df)} rows for {symbol}.")
         return df
     except Exception as e:
-        st.error(f"Error fetching OHLCV for {symbol}: {e}")
+        st.error(f"Error fetching OHLCV data for {symbol}: {e}")
         return pd.DataFrame()
 
 def get_all_symbols(quote_currencies=["USD", "USDT"]):
