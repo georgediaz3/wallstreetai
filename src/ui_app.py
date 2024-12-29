@@ -236,7 +236,7 @@ def fetch_and_display_data(chosen_cryptos, model, forecast_minutes, auto_trade):
                         df_processed = pd.read_csv(processed_path)
                         df_sym = df_processed[df_processed['symbol'] == sym].sort_values('timestamp', ascending=False)
                         if not df_sym.empty:
-                            latest_features = df_sym.iloc[0][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low', 'sentiment']].values.reshape(1, -1)
+                            latest_features = df_sym.iloc[0][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
                             prediction = model.predict(latest_features)[0]
                             recommendation = "BUY" if prediction == 1 else "NOT BUY"
 
