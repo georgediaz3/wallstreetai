@@ -19,7 +19,7 @@ from fetch_data import (
     fetch_ohlcv,
 
 )
-)
+
 from preprocess import add_indicators_and_sentiment
 
 DATA_PATH = "data"
