@@ -99,23 +99,42 @@ def compute_technical_indicators(df):
         import ta  # Ensure 'ta' is installed: pip install ta
     except ImportError:
         st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
-        return df
+        return pd.DataFrame()
 
-    # Add RSI
-    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+    # Debugging: Validate input DataFrame
+    if 'close' not in df.columns or df['close'].isnull().all():
+        st.error("Missing or invalid 'close' data in the DataFrame.")
+        return pd.DataFrame()
 
-    # Add MACD
-    macd = ta.trend.MACD(close=df['close'])
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
-    df['macd_diff'] = macd.macd_diff()
+    # Remove any rows with NaN or infinite values in 'close'
+    df = df[df['close'].notnull() & ~df['close'].isin([float('inf'), float('-inf')])]
 
-    # Add Bollinger Bands
-    bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-    df['bb_high'] = bollinger.bollinger_hband()
-    df['bb_low'] = bollinger.bollinger_lband()
+    if df.empty:
+        st.error("DataFrame is empty after cleaning 'close' values.")
+        return pd.DataFrame()
 
+    try:
+        # Add RSI
+        df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+
+        # Add MACD
+        macd = ta.trend.MACD(close=df['close'])
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+        df['macd_diff'] = macd.macd_diff()
+
+        # Add Bollinger Bands
+        bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_high'] = bollinger.bollinger_hband()
+        df['bb_low'] = bollinger.bollinger_lband()
+    except Exception as e:
+        st.error(f"Error computing technical indicators: {e}")
+        return pd.DataFrame()
+
+    # Drop rows with any NaN values resulting from calculations
+    df.dropna(inplace=True)
     return df
+
 
 def analyze_and_trade(symbols, model):
     for symbol in symbols:
@@ -154,6 +173,7 @@ def analyze_and_trade(symbols, model):
                 place_paper_sell(symbol, sell_quantity, current_price)
         except Exception as e:
             st.error(f"Error processing {symbol}: {e}")
+
 
 
 # ---------------------------------------
@@ -265,7 +285,10 @@ def compute_technical_indicators(df):
         st.error(f"Error computing technical indicators: {e}")
         return pd.DataFrame()
 
-    # Drop rows with any NaN va
+    # Drop rows with any NaN values resulting from calculations
+    df.dropna(inplace=True)
+    return df
+a
 
 
 
