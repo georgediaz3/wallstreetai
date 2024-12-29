@@ -161,27 +161,27 @@ def main():
     st.title("Portfolio Overview")
 
     st.subheader("Paper Trading Portfolio")
-    st.write(f"**Paper USD Balance:** ${st.session_state['paper_balance']:.2f}")
+    st.write(f"**Paper USD Balance:** ${st.session_state.get('paper_balance', 10000.0):.2f}")
 
-    holdings = st.session_state['holdings']
-    if holdings:
-        holdings_df = pd.DataFrame([
-            {
-                'Symbol': sym,
-                'Quantity': qty,
-                'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
-            } for sym, qty in holdings.items() if qty > 0
-        ])
-        st.dataframe(holdings_df)
-    else:
-        st.write("No holdings.")
+holdings = st.session_state.get('holdings', {})
+if holdings:
+    holdings_df = pd.DataFrame([
+        {
+            'Symbol': sym,
+            'Quantity': qty,
+            'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
+        } for sym, qty in holdings.items() if qty > 0
+    ])
+    st.dataframe(holdings_df)
+else:
+    st.write("No holdings.")
 
-    st.subheader("Trade History")
-    if st.session_state['trade_history']:
-        trades_df = pd.DataFrame(st.session_state['trade_history'])
-        st.dataframe(trades_df)
-    else:
-        st.write("No trades executed yet.")
+if st.session_state.get('trade_history'):
+    trades_df = pd.DataFrame(st.session_state['trade_history'])
+    st.dataframe(trades_df)
+else:
+    st.write("No trades executed yet.")
+
 
     st.sidebar.title("Menu")
     menu_choice = st.sidebar.radio("Select a view:", ("Trading Dashboard", "Portfolio & History"))
@@ -217,6 +217,8 @@ def main():
                     time.sleep(60)  # Wait 1 minute between trades
             except KeyboardInterrupt:
                 st.write("Trading interrupted by user.")
+
+
 
 
 
