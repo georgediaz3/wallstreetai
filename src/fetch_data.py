@@ -206,56 +206,7 @@ def filter_crypto_pairs(all_symbols, base_currencies=["BTC", "ETH"]):
     - list: Filtered list of symbols.
     """
     return [symbol for symbol in all_symbols if symbol.split('/')[0] in base_currencies]
-def compute_technical_indicators(df):
-    """
-    Compute technical indicators using the 'ta' library.
-    """
-    try:
-        import ta  # Ensure 'ta' is installed: pip install ta
-    except ImportError:
-        st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
-        return df
 
-    # Add RSI
-    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
-
-    # Add MACD
-    macd = ta.trend.MACD(close=df['close'])
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
-    df['macd_diff'] = macd.macd_diff()
-
-    # Add Bollinger Bands
-    bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-    df['bb_high'] = bollinger.bollinger_hband()
-    df['bb_low'] = bollinger.bollinger_lband()
-
-    return df
-    def analyze_and_trade(symbols, model):
-    for symbol in symbols:
-        try:
-            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
-            if ohlcv_df.empty:
-                continue
-
-            # Compute indicators
-            ohlcv_df = compute_technical_indicators(ohlcv_df)
-            ohlcv_df.dropna(inplace=True)  # Drop rows with NaN values due to indicator calculation
-
-            # Extract features for AI model
-            latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
-            prediction = model.predict(latest_features)[0]
-            current_price = ohlcv_df.iloc[-1]['close']
-
-            # Make trade decision
-            if prediction == 1:  # BUY signal
-                trade_amount = st.session_state['paper_balance'] * 0.1  # Trade 10% of balance
-                place_paper_buy(symbol, trade_amount, current_price)
-            elif st.session_state['holdings'].get(symbol, 0) > 0:  # SELL signal
-                sell_quantity = st.session_state['holdings'][symbol]
-                place_paper_sell(symbol, sell_quantity, current_price)
-        except Exception as e:
-            st.error(f\"Error processing {symbol}: {e}\")
 
 
 
