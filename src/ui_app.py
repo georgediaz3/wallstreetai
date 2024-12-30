@@ -149,10 +149,12 @@ def backtest(data_path='data/historical_data_with_indicators.csv', model_path='m
         df = pd.read_csv(data_path)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-        # Filter by date range
+        # Convert Streamlit date inputs to datetime64
         if start_date:
+            start_date = pd.Timestamp(start_date)
             df = df[df['timestamp'] >= start_date]
         if end_date:
+            end_date = pd.Timestamp(end_date)
             df = df[df['timestamp'] <= end_date]
 
         if df.empty:
