@@ -33,7 +33,7 @@ logging.basicConfig(
 # Define Constants
 EXCHANGE_ID = "coinbaseadvanced"  # You can change this to any supported exchange in ccxt
 TIMEFRAME = '1h'  # Timeframe for OHLCV data
-LIMIT = 168  # Number of data points to fetch per symbol
+LIMIT = 1000  # Number of data points to fetch per symbol
 DATA_DIR = "data"
 MODELS_DIR = "models"
 DATA_FILE = os.path.join(DATA_DIR, "multi_data_with_indicators_sentiment.csv")
