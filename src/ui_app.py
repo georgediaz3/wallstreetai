@@ -1,225 +1,164 @@
-import streamlit as st
+import ccxt
 import pandas as pd
-import plotly.express as px
-import os
-import pickle
+import ta
+import streamlit as st
 from datetime import datetime
 import time
-from fetch_data import get_all_symbols, fetch_ohlcv, fetch_multiple_ohlcv
+import pickle
+from sklearn.ensemble import RandomForestClassifier
 
-# ---------------------------------------
-# 1. Load AI Model
-# ---------------------------------------
-MODEL_PATH = "models/random_forest.pkl"
+# Define the exchange ID
+EXCHANGE_ID = "coinbasepro"  # Updated to 'coinbasepro' for better CCXT support
 
-def load_model():
-    if os.path.exists(MODEL_PATH):
-        try:
-            with open(MODEL_PATH, 'rb') as f:
-                model = pickle.load(f)
-            st.success("AI model loaded successfully!")
-            return model
-        except Exception as e:
-            st.error(f"Error loading model: {e}")
-            return None
-    else:
-        st.error("Model file not found. Please train the model first.")
-        return None
-
-# ---------------------------------------
-# 2. Initialize Session State
-# ---------------------------------------
-def initialize_session_state():
-    if 'paper_balance' not in st.session_state:
-        st.session_state['paper_balance'] = 10000.0  # Starting balance
-    if 'holdings' not in st.session_state:
-        st.session_state['holdings'] = {}  # e.g., { 'BTC/USD': 0.5 }
-    if 'trade_history' not in st.session_state:
-        st.session_state['trade_history'] = []
-
-# ---------------------------------------
-# 3. Paper Trading Functions
-# ---------------------------------------
-def place_paper_buy(symbol, buy_usd_amount, current_price):
-    if buy_usd_amount > st.session_state['paper_balance']:
-        st.warning("Not enough paper balance to buy.")
-        return
-
-    if current_price <= 0:
-        st.warning(f"Invalid price for {symbol}.")
-        return
-
-    quantity = buy_usd_amount / current_price
-    st.session_state['holdings'][symbol] = st.session_state['holdings'].get(symbol, 0) + quantity
-    st.session_state['paper_balance'] -= buy_usd_amount
-
-    st.session_state['trade_history'].append({
-        'symbol': symbol,
-        'action': 'BUY',
-        'price': current_price,
-        'amount_usd': buy_usd_amount,
-        'quantity': quantity,
-        'timestamp': datetime.now()
-    })
-    st.success(f"Paper trade: Bought {quantity:.4f} {symbol} for ${buy_usd_amount:.2f} at ${current_price:.2f}")
-
-
-def place_paper_sell(symbol, sell_quantity, current_price):
-    current_hold = st.session_state['holdings'].get(symbol, 0.0)
-    if sell_quantity > current_hold:
-        st.warning(f"Not enough {symbol} in holdings to sell.")
-        return
-    if current_price <= 0:
-        st.warning(f"Invalid price for {symbol}.")
-        return
-
-    usd_gained = sell_quantity * current_price
-    st.session_state['holdings'][symbol] = current_hold - sell_quantity
-    st.session_state['paper_balance'] += usd_gained
-
-    st.session_state['trade_history'].append({
-        'symbol': symbol,
-        'action': 'SELL',
-        'price': current_price,
-        'amount_usd': usd_gained,
-        'quantity': sell_quantity,
-        'timestamp': datetime.now()
-    })
-    st.success(f"Paper trade: Sold {sell_quantity:.4f} {symbol} for ${usd_gained:.2f} at ${current_price:.2f}")
-
-# ---------------------------------------
-# 4. Automated Paper Trading
-# ---------------------------------------
-def compute_technical_indicators(df):
+def get_exchange(exchange_id=EXCHANGE_ID):
     """
-    Compute technical indicators using the 'ta' library.
+    Initializes and returns the CCXT exchange instance.
+
+    Parameters:
+    - exchange_id (str): The CCXT exchange identifier.
+
+    Returns:
+    - ccxt.Exchange: An instance of the specified exchange.
     """
     try:
-        import ta  # Ensure 'ta' is installed: pip install ta
-    except ImportError:
-        st.error("The 'ta' library is required to compute indicators. Install it using `pip install ta`.")
-        return df
+        exchange_class = getattr(ccxt, exchange_id)
+        exchange = exchange_class()
+        exchange.load_markets()
+        return exchange
+    except AttributeError:
+        raise ValueError(f"Exchange '{exchange_id}' is not supported by CCXT.")
+    except Exception as e:
+        raise RuntimeError(f"Error initializing exchange {exchange_id}: {e}")
 
-    # Add RSI
-    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+def fetch_multiple_ohlcv(symbols=None, timeframe='1h', limit=1000):
+    """
+    Fetches OHLCV data for multiple symbols and returns a combined DataFrame with a 'symbol' column.
 
-    # Add MACD
-    macd = ta.trend.MACD(close=df['close'])
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
-    df['macd_diff'] = macd.macd_diff()
+    Parameters:
+    - symbols (list): List of trading pairs (e.g., ['BTC/USD', 'ETH/USD']).
+    - timeframe (str): Timeframe for OHLCV data (e.g., '1h').
+    - limit (int): Number of data points to fetch per symbol.
 
-    # Add Bollinger Bands
-    bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-    df['bb_high'] = bollinger.bollinger_hband()
-    df['bb_low'] = bollinger.bollinger_lband()
+    Returns:
+    - pd.DataFrame: Combined OHLCV data for all symbols.
+    """
+    if symbols is None:
+        symbols = ['BTC/USD']  # Default fallback
 
-    return df
+    try:
+        exchange = get_exchange()
+    except (ValueError, RuntimeError) as e:
+        st.error(f"Error initializing exchange: {e}")
+        return pd.DataFrame()
 
-def analyze_and_trade(symbols, model):
-    for symbol in symbols:
+    all_dfs = []
+    for sym in symbols:
         try:
-            ohlcv_df = fetch_ohlcv(symbol, timeframe='1m', limit=30)  # Fetch last 30 minutes of data
+            st.write(f"Fetching OHLCV data for {sym}...")
+            data = exchange.fetch_ohlcv(sym, timeframe, limit=limit)
+            time.sleep(0.2)  # Respect rate limits
+            columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+            df = pd.DataFrame(data, columns=columns)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df['symbol'] = sym  # Add symbol column
 
-            if ohlcv_df.empty or len(ohlcv_df) < 1:
-                continue
+            # Add technical indicators
+            df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
+            macd = ta.trend.MACD(df['close'])
+            df['macd'] = macd.macd()
+            df['macd_signal'] = macd.macd_signal()
+            df['macd_diff'] = macd.macd_diff()
+            bollinger = ta.volatility.BollingerBands(df['close'], window=20)
+            df['bb_high'] = bollinger.bollinger_hband()
+            df['bb_low'] = bollinger.bollinger_lband()
 
-            # Ensure required columns exist
-            required_columns = ['timestamp', 'close', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
-            if not all(col in ohlcv_df.columns for col in required_columns):
-                ohlcv_df = compute_technical_indicators(ohlcv_df)
-                ohlcv_df.dropna(inplace=True)
-
-            if ohlcv_df.empty or not all(col in ohlcv_df.columns for col in required_columns):
-                continue
-
-            # Extract features for AI model
-            latest_features = ohlcv_df.iloc[-1][['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']].values.reshape(1, -1)
-            prediction = model.predict(latest_features)[0]
-            current_price = ohlcv_df.iloc[-1]['close']
-
-            # Make trade decision
-            if prediction == 1:  # BUY signal
-                trade_amount = st.session_state['paper_balance'] * 0.1  # Trade 10% of balance
-                place_paper_buy(symbol, trade_amount, current_price)
-            elif st.session_state['holdings'].get(symbol, 0) > 0:  # SELL signal
-                sell_quantity = st.session_state['holdings'][symbol]
-                place_paper_sell(symbol, sell_quantity, current_price)
+            all_dfs.append(df)
+            st.write(f"Fetched {len(df)} rows for {sym}.")
         except Exception as e:
-            pass
+            st.error(f"Error fetching OHLCV data for {sym}: {e}")
+            continue
 
-# ---------------------------------------
-# 5. Main Function
-# ---------------------------------------
+    if all_dfs:
+        combined = pd.concat(all_dfs, ignore_index=True)
+        combined.sort_values(['symbol', 'timestamp'], inplace=True)
+        st.write("Successfully fetched and combined OHLCV data for all symbols.")
+        return combined
+    else:
+        st.error("No OHLCV data fetched for any symbols.")
+        return pd.DataFrame()
+
+def save_data(df, filename='data/historical_data_with_indicators.csv'):
+    """
+    Saves the fetched data to a CSV file in a format compatible with backtest.
+
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to save.
+    - filename (str): Path to save the CSV file.
+    """
+    if not df.empty:
+        required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'symbol', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+        for col in required_columns:
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
+
+        df.to_csv(filename, index=False)
+        st.write(f"Data saved to {filename}")
+    else:
+        st.error("No data to save.")
+
+def train_model(data_path='data/historical_data_with_indicators.csv', model_path='models/random_forest.pkl'):
+    """
+    Trains a Random Forest model on the given dataset.
+
+    Parameters:
+    - data_path (str): Path to the input data file.
+    - model_path (str): Path to save the trained model.
+    """
+    try:
+        df = pd.read_csv(data_path)
+        df.dropna(inplace=True)
+
+        # Define features and target
+        features = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+        X = df[features]
+        y = (df['close'].shift(-1) > df['close']).astype(int)  # Binary target: 1 if next close > current close
+
+        # Train Random Forest model
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X[:-1], y[:-1])  # Exclude the last row for training
+
+        # Save the model
+        with open(model_path, 'wb') as f:
+            pickle.dump(model, f)
+
+        st.write("Model trained and saved successfully!")
+    except Exception as e:
+        st.error(f"Error during model training: {e}")
+
 def main():
-    st.set_page_config(page_title="AI-Driven Paper Trading Dashboard", layout="wide")
+    """
+    Main Streamlit UI for fetching data, training models, and displaying results.
+    """
+    st.title("Crypto Data Fetching and Model Training")
 
-    # Initialize session state
-    initialize_session_state()
+    # User inputs for fetching data
+    symbols = st.text_input("Enter symbols (comma-separated):", value="BTC/USD,ETH/USD,SOL/USD,DOGE/USD,ADA/USD")
+    timeframe = st.selectbox("Select timeframe:", options=['1m', '5m', '1h', '4h', '1d'], index=2)
+    limit = st.number_input("Enter data limit per symbol:", value=2000, min_value=100, max_value=5000, step=100)
 
-    # Portfolio display at the top of the page
-    st.title("Portfolio Overview")
+    # Fetch data button
+    if st.button("Fetch Data"):
+        symbol_list = [s.strip() for s in symbols.split(',')]
+        df = fetch_multiple_ohlcv(symbols=symbol_list, timeframe=timeframe, limit=limit)
+        save_data(df)
 
-    st.subheader("Paper Trading Portfolio")
-    st.write(f"**Paper USD Balance:** ${st.session_state.get('paper_balance', 10000.0):.2f}")
-
-    holdings = st.session_state.get('holdings', {})
-    if holdings:
-        holdings_df = pd.DataFrame([
-            {
-                'Symbol': sym,
-                'Quantity': qty,
-                'Value (USD)': qty * fetch_ohlcv(sym, '1m', 1).iloc[-1]['close']
-            } for sym, qty in holdings.items() if qty > 0
-        ])
-        st.dataframe(holdings_df)
-    else:
-        st.write("No holdings.")
-
-    st.subheader("Trade History")
-    if st.session_state.get('trade_history'):
-        trades_df = pd.DataFrame(st.session_state['trade_history'])
-        st.dataframe(trades_df)
-    else:
-        st.write("No trades executed yet.")
-
-    st.sidebar.title("Menu")
-    menu_choice = st.sidebar.radio("Select a view:", ("Trading Dashboard", "Portfolio & History"))
-
-    if menu_choice == "Trading Dashboard":
-        st.title("AI-Driven Paper Trading Dashboard")
-
-        # Sidebar configuration
-        trade_amount = st.sidebar.number_input("Trade Amount (USD, % of Balance)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
-        st.sidebar.write(f"Available Balance: ${st.session_state['paper_balance']:.2f}")
-        start_trading = st.sidebar.button("Start Automated Trading")
-
-        # Load the AI model
-        model = load_model()
-
-        if model and start_trading:
-            st.write("Starting automated trading...")
-            try:
-                symbols = get_all_symbols()
-                if not symbols:
-                    st.error("No symbols returned. Please check the data source.")
-                    return
-            except Exception as e:
-                st.error(f"Error fetching symbols: {e}")
-                return
-
-            try:
-                while True:
-                    analyze_and_trade(symbols, model)
-                    if st.sidebar.button("Stop Trading"):
-                        st.write("Trading stopped.")
-                        break
-                    time.sleep(60)  # Wait 1 minute between trades
-            except KeyboardInterrupt:
-                st.write("Trading interrupted by user.")
+    # Train model button
+    if st.button("Train Model"):
+        train_model()
 
 if __name__ == "__main__":
     main()
+
 
 
 
