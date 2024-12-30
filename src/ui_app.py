@@ -30,14 +30,15 @@ def get_exchange(exchange_id=EXCHANGE_ID):
     except Exception as e:
         raise RuntimeError(f"Error initializing exchange {exchange_id}: {e}")
 
-def fetch_multiple_ohlcv(symbols=None, timeframe='1h', limit=1000):
+def fetch_multiple_ohlcv(symbols=None, timeframe='1h', limit=1000, max_data_points=10000):
     """
-    Fetches OHLCV data for multiple symbols and returns a combined DataFrame with a 'symbol' column.
+    Fetches OHLCV data for multiple symbols iteratively to gather more data.
 
     Parameters:
     - symbols (list): List of trading pairs (e.g., ['BTC/USD', 'ETH/USD']).
     - timeframe (str): Timeframe for OHLCV data (e.g., '1h').
-    - limit (int): Number of data points to fetch per symbol.
+    - limit (int): Number of data points to fetch per API call (max 1000 for most exchanges).
+    - max_data_points (int): Maximum number of total data points to fetch.
 
     Returns:
     - pd.DataFrame: Combined OHLCV data for all symbols.
@@ -55,25 +56,41 @@ def fetch_multiple_ohlcv(symbols=None, timeframe='1h', limit=1000):
     for sym in symbols:
         try:
             st.write(f"Fetching OHLCV data for {sym}...")
-            data = exchange.fetch_ohlcv(sym, timeframe, limit=limit)
-            time.sleep(0.2)  # Respect rate limits
-            columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-            df = pd.DataFrame(data, columns=columns)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df['symbol'] = sym  # Add symbol column
+            combined_df = []
+            since = None
+            total_fetched = 0
 
-            # Add technical indicators
-            df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
-            macd = ta.trend.MACD(df['close'])
-            df['macd'] = macd.macd()
-            df['macd_signal'] = macd.macd_signal()
-            df['macd_diff'] = macd.macd_diff()
-            bollinger = ta.volatility.BollingerBands(df['close'], window=20)
-            df['bb_high'] = bollinger.bollinger_hband()
-            df['bb_low'] = bollinger.bollinger_lband()
+            while total_fetched < max_data_points:
+                data = exchange.fetch_ohlcv(sym, timeframe, since=since, limit=limit)
+                if not data:
+                    break
 
-            all_dfs.append(df)
-            st.write(f"Fetched {len(df)} rows for {sym}.")
+                columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                df = pd.DataFrame(data, columns=columns)
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                df['symbol'] = sym
+
+                combined_df.append(df)
+                total_fetched += len(df)
+                since = int(df['timestamp'].iloc[-1].timestamp() * 1000)  # Prepare for the next API call
+
+                if len(df) < limit:
+                    break  # No more data available
+
+            if combined_df:
+                combined_df = pd.concat(combined_df, ignore_index=True)
+                combined_df['rsi'] = ta.momentum.RSIIndicator(combined_df['close'], window=14).rsi()
+                macd = ta.trend.MACD(combined_df['close'])
+                combined_df['macd'] = macd.macd()
+                combined_df['macd_signal'] = macd.macd_signal()
+                combined_df['macd_diff'] = macd.macd_diff()
+                bollinger = ta.volatility.BollingerBands(combined_df['close'], window=20)
+                combined_df['bb_high'] = bollinger.bollinger_hband()
+                combined_df['bb_low'] = bollinger.bollinger_lband()
+
+                all_dfs.append(combined_df)
+                st.write(f"Fetched {len(combined_df)} rows for {sym}.")
+
         except Exception as e:
             st.error(f"Error fetching OHLCV data for {sym}: {e}")
             continue
@@ -87,24 +104,6 @@ def fetch_multiple_ohlcv(symbols=None, timeframe='1h', limit=1000):
         st.error("No OHLCV data fetched for any symbols.")
         return pd.DataFrame()
 
-def save_data(df, filename='data/historical_data_with_indicators.csv'):
-    """
-    Saves the fetched data to a CSV file in a format compatible with backtest.
-
-    Parameters:
-    - df (pd.DataFrame): The DataFrame to save.
-    - filename (str): Path to save the CSV file.
-    """
-    if not df.empty:
-        required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'symbol', 'rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
-        for col in required_columns:
-            if col not in df.columns:
-                raise ValueError(f"Missing required column: {col}")
-
-        df.to_csv(filename, index=False)
-        st.write(f"Data saved to {filename}")
-    else:
-        st.error("No data to save.")
 
 def train_model(data_path='data/historical_data_with_indicators.csv', model_path='models/random_forest.pkl'):
     """
