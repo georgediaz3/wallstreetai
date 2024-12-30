@@ -287,9 +287,11 @@ def main():
     if st.button("Run Backtest"):
         backtest(start_date=start_date, end_date=end_date)
 
+    # Start paper trading button
     if st.button("Start Paper Trading"):
-    symbols = [s.strip() for s in symbols.split(',')]
-    paper_trade(symbols=symbols, timeframe=timeframe)
+        symbol_list = [s.strip() for s in symbols.split(',')]
+        paper_trade(symbols=symbol_list, timeframe=timeframe)
+
 
 
 if __name__ == "__main__":
