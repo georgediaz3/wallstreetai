@@ -135,11 +135,62 @@ def train_model(data_path='data/historical_data_with_indicators.csv', model_path
     except Exception as e:
         st.error(f"Error during model training: {e}")
 
+def backtest(data_path='data/historical_data_with_indicators.csv', model_path='models/random_forest.pkl', start_date=None, end_date=None):
+    """
+    Backtests the trained model on historical data.
+
+    Parameters:
+    - data_path (str): Path to the historical data file.
+    - model_path (str): Path to the trained model.
+    - start_date (str): Start date for the backtest in 'YYYY-MM-DD' format.
+    - end_date (str): End date for the backtest in 'YYYY-MM-DD' format.
+    """
+    try:
+        df = pd.read_csv(data_path)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+        # Filter by date range
+        if start_date:
+            df = df[df['timestamp'] >= start_date]
+        if end_date:
+            df = df[df['timestamp'] <= end_date]
+
+        if df.empty:
+            st.error("No data available for the specified date range.")
+            return
+
+        # Load the model
+        with open(model_path, 'rb') as f:
+            model = pickle.load(f)
+
+        # Define features and make predictions
+        features = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+        df['prediction'] = model.predict(df[features])
+
+        # Calculate returns
+        df['next_close'] = df['close'].shift(-1)
+        df.dropna(inplace=True)
+        df['strategy_return'] = df.apply(
+            lambda row: (row['next_close'] - row['close']) / row['close'] if row['prediction'] == 1 else 0,
+            axis=1
+        )
+
+        total_return = (df['strategy_return'] + 1).prod() - 1
+        st.write(f"Total Hypothetical Return: {total_return * 100:.2f}%")
+
+        # Show trades
+        trades = df[df['prediction'] == 1][['timestamp', 'symbol', 'close']]
+        st.write("Trades Executed:")
+        st.dataframe(trades)
+
+    except Exception as e:
+        st.error(f"Error during backtesting: {e}")
+
 def main():
     """
-    Main Streamlit UI for fetching data, training models, and displaying results.
+    Main Streamlit UI for fetching data, training models, backtesting, and displaying results.
     """
-    st.title("Crypto Data Fetching and Model Training")
+    st.title("Crypto Data Fetching, Model Training, and Backtesting")
 
     # User inputs for fetching data
     symbols = st.text_input("Enter symbols (comma-separated):", value="BTC/USD,ETH/USD,SOL/USD,DOGE/USD,ADA/USD")
@@ -155,6 +206,14 @@ def main():
     # Train model button
     if st.button("Train Model"):
         train_model()
+
+    # Backtest inputs
+    start_date = st.date_input("Backtest Start Date:", value=None)
+    end_date = st.date_input("Backtest End Date:", value=None)
+
+    # Backtest button
+    if st.button("Run Backtest"):
+        backtest(start_date=start_date, end_date=end_date)
 
 if __name__ == "__main__":
     main()
