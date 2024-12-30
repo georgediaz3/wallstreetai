@@ -5,7 +5,8 @@ def backtest(
     data_path='data/historical_data_with_indicators.csv', 
     model_path='models/random_forest.pkl'
 ):
-    df = pd.read_csv(data_path)
+    df = df = df[df['timestamp'] >= '2024-12-22']  # Example: starting 7 days ago
+
 
     # Recreate 'target' to match training logic
     df['future_close'] = df['close'].shift(-1)
@@ -38,6 +39,15 @@ def backtest(
     # Calculate total return
     total_return = (df['strategy_return'] + 1).prod() - 1
     print(f"Total Hypothetical Return: {total_return * 100:.2f}%")
+
+    df['trade_action'] = df.apply(
+    lambda row: 'BUY' if row['prediction'] == 1 else 'HOLD',
+    axis=1
+    )
+    trades = df[df['trade_action'] == 'BUY'][['timestamp', 'symbol', 'close', 'trade_action']]
+    trades.to_csv('week_trades.csv', index=False)
+    print(trades)
+    
 
 if __name__ == "__main__":
     backtest()
