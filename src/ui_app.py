@@ -188,6 +188,73 @@ def backtest(data_path='data/historical_data_with_indicators.csv', model_path='m
     except Exception as e:
         st.error(f"Error during backtesting: {e}")
 
+import os
+
+def paper_trade(symbols, timeframe='1h', interval=3600, model_path='models/random_forest.pkl', trade_log='data/trade_log.csv'):
+    """
+    Executes live paper trading by fetching data, making predictions, and simulating trades.
+
+    Parameters:
+    - symbols (list): List of symbols to trade (e.g., ['BTC/USD', 'ETH/USD']).
+    - timeframe (str): Timeframe for fetching data (e.g., '1h').
+    - interval (int): Time interval (in seconds) between fetches.
+    - model_path (str): Path to the trained model file.
+    - trade_log (str): Path to save trade logs.
+    """
+    try:
+        # Load the model
+        if not os.path.exists(model_path):
+            raise FileNotFoundError("Model file not found. Train the model first.")
+        with open(model_path, 'rb') as f:
+            model = pickle.load(f)
+
+        # Initialize trading log
+        if not os.path.exists(trade_log):
+            with open(trade_log, 'w') as f:
+                f.write("timestamp,symbol,action,price\n")
+
+        st.write("Starting live paper trading...")
+
+        while True:
+            trades = []
+            for symbol in symbols:
+                # Fetch the latest data
+                df = fetch_multiple_ohlcv(symbols=[symbol], timeframe=timeframe, limit=20)
+                if df.empty:
+                    st.warning(f"No data fetched for {symbol}. Skipping.")
+                    continue
+
+                # Prepare the latest row for prediction
+                features = ['rsi', 'macd', 'macd_signal', 'macd_diff', 'bb_high', 'bb_low']
+                latest_row = df[features].iloc[-1:].dropna()
+                if latest_row.empty:
+                    st.warning(f"No valid features for {symbol}. Skipping.")
+                    continue
+
+                # Make prediction
+                prediction = model.predict(latest_row)[0]
+                action = "BUY" if prediction == 1 else "HOLD"
+
+                # Log the trade
+                price = df['close'].iloc[-1]
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                trades.append({"timestamp": timestamp, "symbol": symbol, "action": action, "price": price})
+                st.write(f"{timestamp} - {symbol}: {action} at {price}")
+
+            # Save trades to log
+            if trades:
+                trade_df = pd.DataFrame(trades)
+                trade_df.to_csv(trade_log, mode='a', header=False, index=False)
+                st.write("Trades logged successfully.")
+
+            # Wait for the next interval
+            st.write(f"Sleeping for {interval} seconds...")
+            time.sleep(interval)
+
+    except Exception as e:
+        st.error(f"Error during paper trading: {e}")
+
+
 def main():
     """
     Main Streamlit UI for fetching data, training models, backtesting, and displaying results.
@@ -219,6 +286,11 @@ def main():
     # Backtest button
     if st.button("Run Backtest"):
         backtest(start_date=start_date, end_date=end_date)
+
+    if st.button("Start Paper Trading"):
+    symbols = [s.strip() for s in symbols.split(',')]
+    paper_trade(symbols=symbols, timeframe=timeframe)
+
 
 if __name__ == "__main__":
     main()
