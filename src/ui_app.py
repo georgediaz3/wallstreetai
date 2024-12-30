@@ -8,7 +8,7 @@ import pickle
 from sklearn.ensemble import RandomForestClassifier
 
 # Define the exchange ID
-EXCHANGE_ID = "coinbasepro"  # Updated to 'coinbasepro' for better CCXT support
+EXCHANGE_ID = "coinbaseadvanced"  # Updated to 'coinbasepro' for better CCXT support
 
 def get_exchange(exchange_id=EXCHANGE_ID):
     """
